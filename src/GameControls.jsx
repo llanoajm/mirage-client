@@ -8,11 +8,20 @@ export default function GameControls() {
     throttle: 0,
     brake: 0
   })
+  
+  // Mario Kart input state - matches working HTML example
+  const [currentInput, setCurrentInput] = useState({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    jump: false
+  })
 
-  // WebSocket connection - adjust URL to your game server
+  // WebSocket connection to Mario Kart server
   useEffect(() => {
     const connectWebSocket = () => {
-      const ws = new WebSocket('ws://localhost:8080') // Change this to your game's WebSocket URL
+      const ws = new WebSocket('ws://localhost:8082') // Mario Kart WebSocket server
       
       ws.onopen = () => {
         console.log('Connected to game server')
@@ -51,73 +60,136 @@ export default function GameControls() {
     }
   }, [])
 
-  const sendGameCommand = useCallback((action, value) => {
+  // Send complete input state - matches working HTML example
+  const sendInput = useCallback(() => {
     if (socket && socket.readyState === WebSocket.OPEN) {
-      const message = {
-        action,
-        value,
-        timestamp: Date.now()
-      }
-      socket.send(JSON.stringify(message))
-      console.log('Sent to game:', message)
+      socket.send(JSON.stringify(currentInput))
+      console.log('Sent to Mario Kart:', currentInput)
     }
+  }, [socket, currentInput])
+
+  const updateInput = useCallback((updates) => {
+    setCurrentInput(prev => {
+      const newInput = { ...prev, ...updates }
+      // Send immediately after state update
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(newInput))
+        console.log('Sent to Mario Kart:', newInput)
+      }
+      return newInput
+    })
   }, [socket])
 
   const handleSteering = (direction) => {
     const value = direction === 'left' ? -1 : direction === 'right' ? 1 : 0
     setGameState(prev => ({ ...prev, steering: value }))
-    sendGameCommand('steer', value)
+    
+    updateInput({
+      left: direction === 'left',
+      right: direction === 'right'
+    })
   }
 
   const handleThrottle = (value) => {
     setGameState(prev => ({ ...prev, throttle: value }))
-    sendGameCommand('throttle', value)
+    updateInput({ forward: value > 0 })
   }
 
   const handleBrake = (value) => {
     setGameState(prev => ({ ...prev, brake: value }))
-    sendGameCommand('brake', value)
+    updateInput({ backward: value > 0 })
   }
 
-  // Keyboard controls
+  // Keyboard controls - matches working HTML example pattern
   useEffect(() => {
     const handleKeyDown = (e) => {
-      switch(e.key.toLowerCase()) {
-        case 'a':
-        case 'arrowleft':
-          handleSteering('left')
+      let changed = false
+      const updates = {}
+      
+      switch(e.code) {
+        case 'KeyA':
+        case 'ArrowLeft':
+          if (!currentInput.left) {
+            updates.left = true
+            handleSteering('left')
+            changed = true
+          }
           break
-        case 'd':
-        case 'arrowright':
-          handleSteering('right')
+        case 'KeyD':
+        case 'ArrowRight':
+          if (!currentInput.right) {
+            updates.right = true
+            handleSteering('right') 
+            changed = true
+          }
           break
-        case 'w':
-        case 'arrowup':
-          handleThrottle(1)
+        case 'KeyW':
+        case 'ArrowUp':
+          if (!currentInput.forward) {
+            updates.forward = true
+            handleThrottle(1)
+            changed = true
+          }
           break
-        case 's':
-        case 'arrowdown':
-          handleBrake(1)
+        case 'KeyS':
+        case 'ArrowDown':
+          if (!currentInput.backward) {
+            updates.backward = true
+            handleBrake(1)
+            changed = true
+          }
           break
+        case 'Space':
+          if (!currentInput.jump) {
+            updates.jump = true
+            changed = true
+          }
+          break
+      }
+      
+      if (changed) {
+        e.preventDefault()
+        updateInput(updates)
       }
     }
 
     const handleKeyUp = (e) => {
-      switch(e.key.toLowerCase()) {
-        case 'a':
-        case 'd':
-        case 'arrowleft':
-        case 'arrowright':
+      let changed = false
+      const updates = {}
+      
+      switch(e.code) {
+        case 'KeyA':
+        case 'ArrowLeft':
+          updates.left = false
           handleSteering('center')
+          changed = true
           break
-        case 'w':
-        case 'arrowup':
+        case 'KeyD': 
+        case 'ArrowRight':
+          updates.right = false
+          handleSteering('center')
+          changed = true
+          break
+        case 'KeyW':
+        case 'ArrowUp':
+          updates.forward = false
           handleThrottle(0)
+          changed = true
           break
-        case 's':
-        case 'arrowdown':
+        case 'KeyS':
+        case 'ArrowDown':
+          updates.backward = false
           handleBrake(0)
+          changed = true
           break
+        case 'Space':
+          updates.jump = false
+          changed = true
+          break
+      }
+      
+      if (changed) {
+        updateInput(updates)
       }
     }
 
@@ -128,7 +200,7 @@ export default function GameControls() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [])
+  }, [currentInput, updateInput])
 
   const buttonStyle = {
     background: 'rgba(255, 255, 255, 0.1)',
@@ -169,7 +241,7 @@ export default function GameControls() {
         fontSize: '14px',
         textAlign: 'center'
       }}>
-        {connected ? '🟢 Connected' : '🔴 Disconnected'}
+        {connected ? '🏎️ Mario Kart Connected' : '🔴 Mario Kart Disconnected'}
       </div>
 
       {/* Controls */}
@@ -210,7 +282,16 @@ export default function GameControls() {
           →
         </button>
 
-        <div></div>
+        <button 
+          style={currentInput.jump ? activeButtonStyle : buttonStyle}
+          onMouseDown={() => updateInput({ jump: true })}
+          onMouseUp={() => updateInput({ jump: false })}
+          onMouseLeave={() => updateInput({ jump: false })}
+          onTouchStart={(e) => { e.preventDefault(); updateInput({ jump: true }) }}
+          onTouchEnd={(e) => { e.preventDefault(); updateInput({ jump: false }) }}
+        >
+          🚀
+        </button>
         
         <button 
           style={gameState.brake > 0 ? activeButtonStyle : buttonStyle}
@@ -233,9 +314,11 @@ export default function GameControls() {
         fontSize: '12px',
         fontFamily: 'monospace'
       }}>
-        <div>Steering: {gameState.steering}</div>
-        <div>Throttle: {gameState.throttle}</div>
-        <div>Brake: {gameState.brake}</div>
+        <div>Forward: {currentInput.forward ? '✅' : '❌'}</div>
+        <div>Backward: {currentInput.backward ? '✅' : '❌'}</div>
+        <div>Left: {currentInput.left ? '✅' : '❌'}</div>
+        <div>Right: {currentInput.right ? '✅' : '❌'}</div>
+        <div>Jump: {currentInput.jump ? '✅' : '❌'}</div>
       </div>
 
       {/* Instructions */}
@@ -246,8 +329,9 @@ export default function GameControls() {
         fontSize: '11px',
         maxWidth: '200px'
       }}>
-        <strong>Controls:</strong><br/>
+        <strong>Mario Kart Controls:</strong><br/>
         WASD or Arrow Keys<br/>
+        Space = Jump/Drift<br/>
         Mouse/Touch buttons
       </div>
     </div>
