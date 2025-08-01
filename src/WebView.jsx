@@ -9,6 +9,46 @@ export default function WebView({ url }) {
 
     const handleDomReady = () => {
       console.log('WebView loaded:', url)
+      
+      // Inject CSS to hide only UI elements while preserving video content
+      const css = `
+        /* Hide the header with Mirage logo and controls */
+        header#brand-neon-layout-header {
+          display: none !important;
+        }
+        
+        /* Hide mobile navigation at bottom */
+        aside[hidden].fixed.bottom-0 {
+          display: none !important;
+        }
+        
+        /* Hide world selection sidebar */
+        .absolute.bottom-8.z-49.left-0.right-4 {
+          display: none !important;
+        }
+        
+        /* Hide social media links */
+        .absolute.bottom-6.z-20.right-6 {
+          display: none !important;
+        }
+        
+        /* Remove top padding from main content */
+        main.flex-1.relative.h-dvh {
+          padding-top: 0 !important;
+        }
+        
+        /* Hide timer and controls in header area */
+        .inline-flex.items-center.gap-2.py-2 {
+          display: none !important;
+        }
+        
+        /* Hide floating buttons */
+        button[data-slot="tooltip-trigger"] {
+          display: none !important;
+        }
+      `
+      
+      webview.insertCSS(css)
     }
 
     const handleLoadStart = () => {

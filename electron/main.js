@@ -13,9 +13,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false, // Allow camera access
+      webSecurity: false,
       allowRunningInsecureContent: true,
-      experimentalFeatures: true,
       webviewTag: true, // Enable webview
       preload: path.join(__dirname, 'preload.js')
     },
@@ -52,26 +51,6 @@ function createWindow() {
     mainWindow.webContents.setBackgroundThrottling(false)
   })
 
-  // Grant camera permissions automatically - set this BEFORE loading content
-  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    console.log('Permission requested:', permission)
-    if (permission === 'camera' || permission === 'microphone' || permission === 'media') {
-      console.log('Granting permission for:', permission)
-      callback(true) // Grant permission
-    } else {
-      console.log('Denying permission for:', permission)
-      callback(false)
-    }
-  })
-
-  // Set permissions check handler
-  mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-    console.log('Permission check:', permission, requestingOrigin)
-    if (permission === 'camera' || permission === 'microphone' || permission === 'media') {
-      return true
-    }
-    return false
-  })
 
   // Handle window closed
   mainWindow.on('closed', () => {
