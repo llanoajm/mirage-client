@@ -16,8 +16,8 @@ function App() {
       {/* Game Controls Overlay */}
       <GameControls />
       
-      {/* Header */}
-      <div style={{
+      {/* Header - Removed Pike Piker pill */}
+      {/* <div style={{
         position: 'absolute',
         top: '20px',
         left: '50%',
@@ -41,7 +41,7 @@ function App() {
         }}>
           Piker Piker
         </h1>
-      </div>
+      </div> */}
     </div>
   )
 }
