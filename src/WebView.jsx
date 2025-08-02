@@ -177,23 +177,86 @@ export default function WebView({ url }) {
       
       // Also inject JavaScript to replace text content
       const script = `
-        // Replace "ETA" text with "PIKE PIKER"
+        // Replace text content at different stages
         function replaceText() {
-          // Replace ETA with PIKE PIKER
-          const etaElements = document.querySelectorAll('.text-3xl.md\\:text-4xl');
-          etaElements.forEach(element => {
-            if (element.textContent.trim() === 'ETA') {
-              element.textContent = 'PIKE PIKER';
+          console.log('Running text replacement...');
+          
+          // More comprehensive ETA replacement - target all possible elements
+          const allElements = document.querySelectorAll('*');
+          allElements.forEach(element => {
+            // Skip if already replaced
+            if (element.getAttribute('data-replaced') === 'true') return;
+            
+            // Check for ETA text
+            if (element.textContent && element.textContent.trim() === 'ETA' && element.children.length === 0) {
+              console.log('Found ETA element:', element);
+              element.textContent = 'Get Ready to Pedal!';
+              element.setAttribute('data-replaced', 'true');
+            }
+            
+            // Check for "It's your turn!" text - be more flexible with matching
+            const turnText = element.textContent;
+            if (turnText && (
+              turnText.includes("It's your turn!") || 
+              turnText.includes("It&#x27;s your turn!") ||
+              turnText.includes("It&apos;s your turn!") ||
+              turnText.trim() === "It's your turn!"
+            ) && element.children.length === 0) {
+              console.log('Found turn element:', element);
+              element.textContent = "Let's crush this workout together!";
               element.setAttribute('data-replaced', 'true');
             }
           });
           
-          // Replace "It's your turn!" text with "Pike Piker Experience"
-          const turnElements = document.querySelectorAll('.text-white.text-center.text-[33px].md\\:text-6xl.font-medium, .text-white.text-center.text-\\[33px\\].md\\:text-6xl.font-medium');
-          turnElements.forEach(element => {
-            if (element.textContent.includes("It's your turn!") || element.textContent.includes("It&#x27;s your turn!")) {
-              element.textContent = "Pike Piker Experience";
-              element.setAttribute('data-replaced', 'true');
+          // Also try more specific selectors as backup
+          const etaSelectors = [
+            '.text-3xl.md\\:text-4xl',
+            '.text-3xl',
+            '.md\\:text-4xl',
+            '[class*="text-3xl"]',
+            '[class*="text-4xl"]'
+          ];
+          
+          etaSelectors.forEach(selector => {
+            try {
+              const elements = document.querySelectorAll(selector);
+              elements.forEach(element => {
+                if (element.textContent && element.textContent.trim() === 'ETA' && !element.getAttribute('data-replaced')) {
+                  console.log('Found ETA with selector:', selector, element);
+                  element.textContent = 'Get Ready to Pedal!';
+                  element.setAttribute('data-replaced', 'true');
+                }
+              });
+            } catch(e) {
+              console.log('Selector failed:', selector, e);
+            }
+          });
+          
+          const turnSelectors = [
+            '.text-white.text-center.text-\\[33px\\].md\\:text-6xl.font-medium',
+            '.text-white.text-center',
+            '[class*="text-6xl"]',
+            '[class*="text-center"]',
+            'h1', 'h2', 'h3', 'div'
+          ];
+          
+          turnSelectors.forEach(selector => {
+            try {
+              const elements = document.querySelectorAll(selector);
+              elements.forEach(element => {
+                const text = element.textContent;
+                if (text && (
+                  text.includes("It's your turn!") || 
+                  text.includes("It&#x27;s your turn!") ||
+                  text.includes("It&apos;s your turn!")
+                ) && !element.getAttribute('data-replaced')) {
+                  console.log('Found turn with selector:', selector, element);
+                  element.textContent = "Let's crush this workout together!";
+                  element.setAttribute('data-replaced', 'true');
+                }
+              });
+            } catch(e) {
+              console.log('Selector failed:', selector, e);
             }
           });
           
@@ -208,12 +271,28 @@ export default function WebView({ url }) {
           }
         }
         
-        // Run immediately and also on DOM changes
+        // Run immediately
         replaceText();
         
-        // Watch for dynamic content changes
-        const observer = new MutationObserver(replaceText);
-        observer.observe(document.body, { childList: true, subtree: true });
+        // Run after a short delay to catch late-loading content
+        setTimeout(replaceText, 500);
+        setTimeout(replaceText, 1000);
+        setTimeout(replaceText, 2000);
+        
+        // Watch for dynamic content changes with more aggressive monitoring
+        const observer = new MutationObserver(() => {
+          setTimeout(replaceText, 100);
+        });
+        observer.observe(document.body, { 
+          childList: true, 
+          subtree: true, 
+          characterData: true,
+          attributes: false
+        });
+        
+        // Also run on various page events
+        document.addEventListener('DOMContentLoaded', replaceText);
+        window.addEventListener('load', replaceText);
       `
       
       webview.executeJavaScript(script)
@@ -229,6 +308,10 @@ export default function WebView({ url }) {
 
     const handleFailLoad = (e) => {
       console.error('WebView failed to load:', e.errorDescription)
+      // Also inject on fail load to ensure replacements work
+      setTimeout(() => {
+        webview.executeJavaScript(script)
+      }, 1000)
     }
 
     webview.addEventListener('dom-ready', handleDomReady)
