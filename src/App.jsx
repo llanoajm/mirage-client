@@ -1,12 +1,16 @@
 import GameControls from './GameControls'
 import WebView from './WebView'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 function App() {
   const [elapsedTime, setElapsedTime] = useState(0)
   const [distance, setDistance] = useState(0)
   const [speed, setSpeed] = useState(0)
   const [isActive, setIsActive] = useState(false)
+  const [speedHistory, setSpeedHistory] = useState([])
+  const [wsConnected, setWsConnected] = useState(false)
+  const wsRef = useRef(null)
+  const reconnectTimeoutRef = useRef(null)
 
   useEffect(() => {
     let interval = null
@@ -17,6 +21,74 @@ function App() {
     }
     return () => clearInterval(interval)
   }, [isActive])
+
+  // WebSocket connection for speed data
+  useEffect(() => {
+    const connectWebSocket = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        return
+      }
+
+      try {
+        const ws = new WebSocket('ws://192.168.1.41:8765')
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          console.log('Connected to speed sensor WebSocket')
+          setWsConnected(true)
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current)
+            reconnectTimeoutRef.current = null
+          }
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            if (data.speed !== undefined) {
+              setSpeed(data.speed)
+              setSpeedHistory(prev => {
+                const newHistory = [...prev.slice(-49), data.speed]
+                return newHistory
+              })
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error)
+          }
+        }
+
+        ws.onclose = () => {
+          console.log('WebSocket connection closed')
+          setWsConnected(false)
+          if (!reconnectTimeoutRef.current) {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              console.log('Attempting to reconnect...')
+              connectWebSocket()
+            }, 3000)
+          }
+        }
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error)
+          setWsConnected(false)
+        }
+      } catch (error) {
+        console.error('Failed to create WebSocket connection:', error)
+        setWsConnected(false)
+      }
+    }
+
+    connectWebSocket()
+
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
+    }
+  }, [])
 
   const formatTime = (seconds) => {
     const hrs = Math.floor(seconds / 3600)
@@ -33,7 +105,7 @@ function App() {
     return speed.toFixed(1)
   }
 
-  // Mock data for graphs - in real app this would come from actual sensor data
+  // Mock data for distance graph (keep as mock for now)
   const generateGraphData = (value, maxValue = 100) => {
     return Array.from({ length: 50 }, (_, i) => ({
       x: i,
@@ -42,7 +114,14 @@ function App() {
   }
 
   const distanceData = generateGraphData(distance, 50)
-  const speedData = generateGraphData(speed, 30)
+  
+  // Real speed data from WebSocket
+  const speedData = speedHistory.length > 0 
+    ? speedHistory.map((speedValue, i) => ({
+        x: i,
+        y: speedValue
+      }))
+    : generateGraphData(speed, 30)
 
   return (
     <div style={{
@@ -85,6 +164,26 @@ function App() {
             fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
           }}>
             {formatTime(elapsedTime)}
+          </div>
+        </div>
+
+        {/* WebSocket Status */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            fontSize: '14px',
+            color: '#666',
+            marginBottom: '4px',
+            fontWeight: '500'
+          }}>
+            SPEED SENSOR
+          </div>
+          <div style={{
+            fontSize: '12px',
+            fontWeight: 'bold',
+            color: wsConnected ? '#22c55e' : '#ef4444',
+            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
+          }}>
+            {wsConnected ? '● CONNECTED' : '● DISCONNECTED'}
           </div>
         </div>
 
@@ -191,22 +290,57 @@ function App() {
             </div>
             <div style={{
               height: '80px',
-              position: 'relative'
+              position: 'relative',
+              background: '#f8f9fa',
+              borderRadius: '4px'
             }}>
-              {speedData.map((point, i) => (
-                <div
-                  key={i}
+              {speedData.map((point, i) => {
+                const maxSpeed = Math.max(...speedData.map(p => p.y), 30)
+                const normalizedY = (point.y / maxSpeed) * 100
+                const xPos = speedData.length > 1 ? (i / (speedData.length - 1)) * 100 : 50
+                
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      position: 'absolute',
+                      left: `${xPos}%`,
+                      bottom: `${normalizedY}%`,
+                      width: '3px',
+                      height: '3px',
+                      background: wsConnected ? '#22c55e' : '#000',
+                      borderRadius: '50%',
+                      transform: 'translate(-50%, 50%)'
+                    }}
+                  />
+                )
+              })}
+              {speedData.length > 1 && (
+                <svg
                   style={{
                     position: 'absolute',
-                    left: `${(point.x / 49) * 100}%`,
-                    bottom: `${(point.y / 30) * 100}%`,
-                    width: '2px',
-                    height: '2px',
-                    background: '#000',
-                    borderRadius: '50%'
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none'
                   }}
-                />
-              ))}
+                >
+                  <polyline
+                    points={speedData.map((point, i) => {
+                      const maxSpeed = Math.max(...speedData.map(p => p.y), 30)
+                      const normalizedY = 80 - (point.y / maxSpeed) * 80
+                      const xPos = speedData.length > 1 ? (i / (speedData.length - 1)) * 300 : 150
+                      return `${xPos},${normalizedY}`
+                    }).join(' ')}
+                    fill="none"
+                    stroke={wsConnected ? '#22c55e' : '#000'}
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )}
             </div>
           </div>
         </div>
