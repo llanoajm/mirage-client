@@ -8,9 +8,13 @@ function App() {
   const [speed, setSpeed] = useState(0)
   const [isActive, setIsActive] = useState(false)
   const [speedHistory, setSpeedHistory] = useState([])
+  const [distanceHistory, setDistanceHistory] = useState([])
   const [wsConnected, setWsConnected] = useState(false)
   const wsRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
+  const lastSpeedUpdate = useRef(null)
+  const lastDistanceUpdate = useRef(Date.now())
+  const lastDistanceSample = useRef(Date.now())
 
   useEffect(() => {
     let interval = null
@@ -46,11 +50,51 @@ function App() {
           try {
             const data = JSON.parse(event.data)
             if (data.speed !== undefined) {
-              setSpeed(data.speed)
+              const currentTime = Date.now()
+              const currentSpeed = data.speed
+              
+              setSpeed(currentSpeed)
               setSpeedHistory(prev => {
-                const newHistory = [...prev.slice(-49), data.speed]
+                const newHistory = [...prev.slice(-49), currentSpeed]
                 return newHistory
               })
+              
+              // Auto-start timer when speed > 0 and not already active
+              if (currentSpeed > 0 && !isActive) {
+                console.log('Movement detected! Auto-starting timer...')
+                setIsActive(true)
+                setElapsedTime(0)
+                setDistance(0)
+                setDistanceHistory([])
+                lastDistanceUpdate.current = currentTime
+                lastDistanceSample.current = currentTime
+              }
+              
+              // Calculate distance if we have a previous speed reading and timer is active
+              if (lastSpeedUpdate.current && isActive) {
+                const timeDiffSeconds = (currentTime - lastDistanceUpdate.current) / 1000
+                const avgSpeed = (lastSpeedUpdate.current + currentSpeed) / 2
+                const distanceIncrement = (avgSpeed * timeDiffSeconds) / 3600 // km/h * h = km
+                
+                setDistance(prev => {
+                  const newDistance = prev + distanceIncrement
+                  
+                  // Sample distance for graph every 30 seconds
+                  if (currentTime - lastDistanceSample.current >= 30000) {
+                    setDistanceHistory(prevHistory => {
+                      const newHistory = [...prevHistory, newDistance]
+                      return newHistory.slice(-20) // Keep last 20 samples (10 minutes of data)
+                    })
+                    lastDistanceSample.current = currentTime
+                  }
+                  
+                  return newDistance
+                })
+                
+                lastDistanceUpdate.current = currentTime
+              }
+              
+              lastSpeedUpdate.current = currentSpeed
             }
           } catch (error) {
             console.error('Error parsing WebSocket message:', error)
@@ -90,6 +134,7 @@ function App() {
     }
   }, [])
 
+
   const formatTime = (seconds) => {
     const hrs = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
@@ -105,7 +150,7 @@ function App() {
     return speed.toFixed(1)
   }
 
-  // Mock data for distance graph (keep as mock for now)
+  // Mock data for distance graph (fallback)
   const generateGraphData = (value, maxValue = 100) => {
     return Array.from({ length: 50 }, (_, i) => ({
       x: i,
@@ -113,7 +158,13 @@ function App() {
     }))
   }
 
-  const distanceData = generateGraphData(distance, 50)
+  // Real distance data from calculations - show cumulative distance over time
+  const distanceData = distanceHistory.length > 0 
+    ? distanceHistory.map((distValue, i) => ({
+        x: i,
+        y: distValue
+      }))
+    : (distance > 0 ? [{ x: 0, y: distance }] : [])
   
   // Real speed data from WebSocket
   const speedData = speedHistory.length > 0 
@@ -180,7 +231,7 @@ function App() {
           <div style={{
             fontSize: '12px',
             fontWeight: 'bold',
-            color: wsConnected ? '#22c55e' : '#ef4444',
+            color: 'black',
             fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
           }}>
             {wsConnected ? '● CONNECTED' : '● DISCONNECTED'}
@@ -252,22 +303,95 @@ function App() {
             </div>
             <div style={{
               height: '80px',
-              position: 'relative'
+              position: 'relative',
+              background: '#f8f9fa',
+              borderRadius: '4px'
             }}>
-              {distanceData.map((point, i) => (
-                <div
-                  key={i}
+              {distanceData.length > 0 && (
+                <svg
                   style={{
                     position: 'absolute',
-                    left: `${(point.x / 49) * 100}%`,
-                    bottom: `${(point.y / 50) * 100}%`,
-                    width: '2px',
-                    height: '2px',
-                    background: '#000',
-                    borderRadius: '50%'
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none'
                   }}
-                />
-              ))}
+                >
+                  {/* Grid lines for reference */}
+                  <defs>
+                    <pattern id="grid" width="30" height="20" patternUnits="userSpaceOnUse">
+                      <path d="M 30 0 L 0 0 0 20" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid)" />
+                  
+                  {/* Distance line - always ascending */}
+                  {distanceData.length > 1 ? (
+                    <polyline
+                      points={distanceData.map((point, i) => {
+                        const maxDistance = Math.max(...distanceData.map(p => p.y), 1)
+                        const yPos = 80 - (point.y / maxDistance) * 70 // Leave 10px margin at top
+                        const xPos = (i / (distanceData.length - 1)) * 300
+                        return `${xPos},${yPos}`
+                      }).join(' ')}
+                      fill="none"
+                      stroke={isActive ? '#3b82f6' : '#6b7280'}
+                      strokeWidth="3"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                  ) : (
+                    /* Single point - show as a dot */
+                    distanceData.map((point, i) => {
+                      const maxDistance = Math.max(point.y, 1)
+                      const yPos = 80 - (point.y / maxDistance) * 70
+                      return (
+                        <circle
+                          key={i}
+                          cx="150"
+                          cy={yPos}
+                          r="4"
+                          fill={isActive ? '#3b82f6' : '#6b7280'}
+                        />
+                      )
+                    })
+                  )}
+                  
+                  {/* Data points */}
+                  {distanceData.map((point, i) => {
+                    const maxDistance = Math.max(...distanceData.map(p => p.y), 1)
+                    const yPos = 80 - (point.y / maxDistance) * 70
+                    const xPos = distanceData.length > 1 ? (i / (distanceData.length - 1)) * 300 : 150
+                    return (
+                      <circle
+                        key={i}
+                        cx={xPos}
+                        cy={yPos}
+                        r="3"
+                        fill={isActive ? '#3b82f6' : '#6b7280'}
+                        stroke="white"
+                        strokeWidth="1"
+                      />
+                    )
+                  })}
+                </svg>
+              )}
+              
+              {/* No data state */}
+              {distanceData.length === 0 && (
+                <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  color: '#9ca3af',
+                  fontSize: '12px',
+                  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
+                }}>
+                  Start moving to track distance
+                </div>
+              )}
             </div>
           </div>
 

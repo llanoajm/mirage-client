@@ -293,6 +293,7 @@ export default function WebView({ url }) {
         // Also run on various page events
         document.addEventListener('DOMContentLoaded', replaceText);
         window.addEventListener('load', replaceText);
+        
       `
       
       webview.executeJavaScript(script)
@@ -313,6 +314,7 @@ export default function WebView({ url }) {
         webview.executeJavaScript(script)
       }, 1000)
     }
+
 
     webview.addEventListener('dom-ready', handleDomReady)
     webview.addEventListener('did-start-loading', handleLoadStart)
