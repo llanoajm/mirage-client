@@ -3,11 +3,6 @@ import { useEffect, useState, useCallback } from 'react'
 export default function GameControls() {
   const [socket, setSocket] = useState(null)
   const [connected, setConnected] = useState(false)
-  const [gameState, setGameState] = useState({
-    steering: 0,
-    throttle: 0,
-    brake: 0
-  })
   
   // Mario Kart input state - matches working HTML example
   const [currentInput, setCurrentInput] = useState({
@@ -24,28 +19,28 @@ export default function GameControls() {
       const ws = new WebSocket('ws://localhost:8082') // Mario Kart WebSocket server
       
       ws.onopen = () => {
-        console.log('Connected to game server')
+        console.log('🏎️ Connected to Mario Kart server')
         setConnected(true)
       }
       
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          console.log('Received from game:', data)
+          console.log('📨 Received from Mario Kart:', data)
         } catch (err) {
-          console.log('Received raw message:', event.data)
+          console.log('📨 Received raw message:', event.data)
         }
       }
       
       ws.onclose = () => {
-        console.log('Disconnected from game server')
+        console.log('🔴 Disconnected from Mario Kart server')
         setConnected(false)
         // Attempt to reconnect after 3 seconds
         setTimeout(connectWebSocket, 3000)
       }
       
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
+        console.error('❌ WebSocket error:', error)
       }
       
       setSocket(ws)
@@ -60,58 +55,37 @@ export default function GameControls() {
     }
   }, [])
 
-  // Send complete input state - matches working HTML example
-  const sendInput = useCallback(() => {
+  // Simple, reliable input sending
+  const sendInput = useCallback((inputData) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(currentInput))
-      console.log('Sent to Mario Kart:', currentInput)
+      socket.send(JSON.stringify(inputData))
+      console.log('🎮 Sent to Mario Kart:', inputData)
+      return true
+    } else {
+      console.warn('⚠️ WebSocket not ready, input not sent:', inputData)
+      return false
     }
-  }, [socket, currentInput])
+  }, [socket])
 
   const updateInput = useCallback((updates) => {
     setCurrentInput(prev => {
       const newInput = { ...prev, ...updates }
-      // Send immediately after state update
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(newInput))
-        console.log('Sent to Mario Kart:', newInput)
-      }
+      sendInput(newInput)
       return newInput
     })
-  }, [socket])
-
-  const handleSteering = (direction) => {
-    const value = direction === 'left' ? -1 : direction === 'right' ? 1 : 0
-    setGameState(prev => ({ ...prev, steering: value }))
-    
-    updateInput({
-      left: direction === 'left',
-      right: direction === 'right'
-    })
-  }
-
-  const handleThrottle = (value) => {
-    setGameState(prev => ({ ...prev, throttle: value }))
-    updateInput({ forward: value > 0 })
-  }
-
-  const handleBrake = (value) => {
-    setGameState(prev => ({ ...prev, brake: value }))
-    updateInput({ backward: value > 0 })
-  }
+  }, [sendInput])
 
   // Keyboard controls - matches working HTML example pattern
   useEffect(() => {
     const handleKeyDown = (e) => {
+      let updates = {}
       let changed = false
-      const updates = {}
       
       switch(e.code) {
         case 'KeyA':
         case 'ArrowLeft':
           if (!currentInput.left) {
             updates.left = true
-            handleSteering('left')
             changed = true
           }
           break
@@ -119,7 +93,6 @@ export default function GameControls() {
         case 'ArrowRight':
           if (!currentInput.right) {
             updates.right = true
-            handleSteering('right') 
             changed = true
           }
           break
@@ -127,7 +100,6 @@ export default function GameControls() {
         case 'ArrowUp':
           if (!currentInput.forward) {
             updates.forward = true
-            handleThrottle(1)
             changed = true
           }
           break
@@ -135,7 +107,6 @@ export default function GameControls() {
         case 'ArrowDown':
           if (!currentInput.backward) {
             updates.backward = true
-            handleBrake(1)
             changed = true
           }
           break
@@ -154,32 +125,28 @@ export default function GameControls() {
     }
 
     const handleKeyUp = (e) => {
+      let updates = {}
       let changed = false
-      const updates = {}
       
       switch(e.code) {
         case 'KeyA':
         case 'ArrowLeft':
           updates.left = false
-          handleSteering('center')
           changed = true
           break
         case 'KeyD': 
         case 'ArrowRight':
           updates.right = false
-          handleSteering('center')
           changed = true
           break
         case 'KeyW':
         case 'ArrowUp':
           updates.forward = false
-          handleThrottle(0)
           changed = true
           break
         case 'KeyS':
         case 'ArrowDown':
           updates.backward = false
-          handleBrake(0)
           changed = true
           break
         case 'Space':
@@ -253,31 +220,34 @@ export default function GameControls() {
       }}>
         {/* Steering */}
         <button 
-          style={gameState.steering === -1 ? activeButtonStyle : buttonStyle}
-          onMouseDown={() => handleSteering('left')}
-          onMouseUp={() => handleSteering('center')}
-          onTouchStart={() => handleSteering('left')}
-          onTouchEnd={() => handleSteering('center')}
+          style={currentInput.left ? activeButtonStyle : buttonStyle}
+          onMouseDown={() => updateInput({ left: true })}
+          onMouseUp={() => updateInput({ left: false })}
+          onMouseLeave={() => updateInput({ left: false })}
+          onTouchStart={(e) => { e.preventDefault(); updateInput({ left: true }) }}
+          onTouchEnd={(e) => { e.preventDefault(); updateInput({ left: false }) }}
         >
           ←
         </button>
         
         <button 
-          style={gameState.throttle > 0 ? activeButtonStyle : buttonStyle}
-          onMouseDown={() => handleThrottle(1)}
-          onMouseUp={() => handleThrottle(0)}
-          onTouchStart={() => handleThrottle(1)}
-          onTouchEnd={() => handleThrottle(0)}
+          style={currentInput.forward ? activeButtonStyle : buttonStyle}
+          onMouseDown={() => updateInput({ forward: true })}
+          onMouseUp={() => updateInput({ forward: false })}
+          onMouseLeave={() => updateInput({ forward: false })}
+          onTouchStart={(e) => { e.preventDefault(); updateInput({ forward: true }) }}
+          onTouchEnd={(e) => { e.preventDefault(); updateInput({ forward: false }) }}
         >
           ↑
         </button>
         
         <button 
-          style={gameState.steering === 1 ? activeButtonStyle : buttonStyle}
-          onMouseDown={() => handleSteering('right')}
-          onMouseUp={() => handleSteering('center')}
-          onTouchStart={() => handleSteering('right')}
-          onTouchEnd={() => handleSteering('center')}
+          style={currentInput.right ? activeButtonStyle : buttonStyle}
+          onMouseDown={() => updateInput({ right: true })}
+          onMouseUp={() => updateInput({ right: false })}
+          onMouseLeave={() => updateInput({ right: false })}
+          onTouchStart={(e) => { e.preventDefault(); updateInput({ right: true }) }}
+          onTouchEnd={(e) => { e.preventDefault(); updateInput({ right: false }) }}
         >
           →
         </button>
@@ -294,11 +264,12 @@ export default function GameControls() {
         </button>
         
         <button 
-          style={gameState.brake > 0 ? activeButtonStyle : buttonStyle}
-          onMouseDown={() => handleBrake(1)}
-          onMouseUp={() => handleBrake(0)}
-          onTouchStart={() => handleBrake(1)}
-          onTouchEnd={() => handleBrake(0)}
+          style={currentInput.backward ? activeButtonStyle : buttonStyle}
+          onMouseDown={() => updateInput({ backward: true })}
+          onMouseUp={() => updateInput({ backward: false })}
+          onMouseLeave={() => updateInput({ backward: false })}
+          onTouchStart={(e) => { e.preventDefault(); updateInput({ backward: true }) }}
+          onTouchEnd={(e) => { e.preventDefault(); updateInput({ backward: false }) }}
         >
           ↓
         </button>
@@ -306,7 +277,7 @@ export default function GameControls() {
         <div></div>
       </div>
 
-      {/* Debug Info */}
+      {/* Debug Info - Simple and Clear */}
       <div style={{
         background: 'rgba(0, 0, 0, 0.8)',
         padding: '10px',
@@ -314,11 +285,14 @@ export default function GameControls() {
         fontSize: '12px',
         fontFamily: 'monospace'
       }}>
-        <div>Forward: {currentInput.forward ? '✅' : '❌'}</div>
-        <div>Backward: {currentInput.backward ? '✅' : '❌'}</div>
-        <div>Left: {currentInput.left ? '✅' : '❌'}</div>
-        <div>Right: {currentInput.right ? '✅' : '❌'}</div>
-        <div>Jump: {currentInput.jump ? '✅' : '❌'}</div>
+        <div style={{color: currentInput.forward ? '#0f0' : '#666'}}>Forward: {currentInput.forward ? '✅' : '❌'}</div>
+        <div style={{color: currentInput.backward ? '#0f0' : '#666'}}>Backward: {currentInput.backward ? '✅' : '❌'}</div>
+        <div style={{color: currentInput.left ? '#0f0' : '#666'}}>Left: {currentInput.left ? '✅' : '❌'}</div>
+        <div style={{color: currentInput.right ? '#0f0' : '#666'}}>Right: {currentInput.right ? '✅' : '❌'}</div>
+        <div style={{color: currentInput.jump ? '#0f0' : '#666'}}>Jump: {currentInput.jump ? '✅' : '❌'}</div>
+        <div style={{color: socket?.readyState === WebSocket.OPEN ? '#0f0' : '#f00'}}>
+          Socket: {socket?.readyState === WebSocket.OPEN ? 'OPEN' : 'CLOSED'}
+        </div>
       </div>
 
       {/* Instructions */}

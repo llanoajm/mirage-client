@@ -39,7 +39,7 @@ function App() {
           backgroundClip: 'text',
           margin: 0
         }}>
-          🎮 Mirage Game Client
+          Piker Piker
         </h1>
       </div>
     </div>

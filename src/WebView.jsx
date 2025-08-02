@@ -46,9 +46,177 @@ export default function WebView({ url }) {
         button[data-slot="tooltip-trigger"] {
           display: none !important;
         }
+        
+        /* Loading Screen Styling - Black and White Theme */
+        
+        /* Set white background for loading screens */
+        body {
+          background: white !important;
+        }
+        
+        /* Style the main loading container */
+        main.pt-20 {
+          background: white !important;
+        }
+        
+        /* Hide the background video on loading screens */
+        .absolute.inset-0.overflow-hidden.select-none {
+          display: none !important;
+        }
+        
+        /* Hide the Mirage logo on loading screens */
+        img[alt="Mirage Logo"] {
+          display: none !important;
+        }
+        
+        /* Style the loading text containers */
+        .text-white {
+          color: black !important;
+        }
+        
+        /* Style the ETA text - will be replaced with PIKE PIKER */
+        .text-3xl.md\\:text-4xl {
+          color: black !important;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+          font-weight: 400 !important;
+        }
+        
+        /* Style the countdown timer */
+        .text-8xl.md\\:text-\\[140px\\].font-medium {
+          color: black !important;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+          font-weight: 500 !important;
+        }
+        
+        /* Style the queue status text */
+        .text-sm.md\\:text-xl {
+          color: black !important;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        }
+        
+        /* Style the queue badge */
+        .inline-flex.items-center.justify-center.py-0\\.5.font-medium.w-fit.whitespace-nowrap.shrink-0 {
+          background: black !important;
+          color: white !important;
+          border: 1px solid black !important;
+        }
+        
+        /* Replace "It's your turn!" with "Pike Piker Experience" */
+        .text-white.text-center.text-\\[33px\\].md\\:text-6xl.font-medium {
+          color: black !important;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+          font-weight: 500 !important;
+        }
+        
+        /* Style the "The experience will start soon..." text */
+        .text-white.text-xl.font-medium {
+          color: black !important;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+          font-weight: 500 !important;
+        }
+        
+        /* Style the loading spinner - make it black */
+        svg.animate-spin path {
+          stroke: black !important;
+        }
+        
+        /* Style the loading spinner gradient to be black */
+        svg.animate-spin defs linearGradient stop {
+          stop-color: black !important;
+        }
+        
+        /* Style the "Session expired" text */
+        .text-white.place-content-center.place-items-center.text-center.leading-tight.flex-col.gap-2.hidden .text-3xl {
+          color: black !important;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        }
+        
+        .text-white.place-content-center.place-items-center.text-center.leading-tight.flex-col.gap-2.hidden .text-md {
+          color: black !important;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        }
+        
+        /* Keep the Start Experience button in its original color */
+        .StartGameButton_button__NLn8b {
+          /* Preserve original button styling */
+        }
+        
+        /* Style the footer container */
+        footer.z-10.flex.fixed.bottom-0.left-0.right-0.items-end.justify-center.pb-16.px-10 {
+          background: transparent !important;
+        }
+        
+        /* Style the footer text container */
+        .font-medium.text-center {
+          background: transparent !important;
+        }
+        
+        /* Add elegant typography for loading text */
+        .min-h-\\[calc\\(100dvh-14rem\\)\\].relative.flex.flex-col.place-content-center.place-items-center {
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        }
+        
+        /* Hide any centered images or assets when experience is ready */
+        .min-h-\\[calc\\(100dvh-14rem\\)\\].relative.flex.flex-col.place-content-center.place-items-center img,
+        .min-h-\\[calc\\(100dvh-14rem\\)\\].relative.flex.flex-col.place-content-center.place-items-center svg:not(.animate-spin) {
+          display: none !important;
+        }
+        
+        /* Hide the custom loading message since we're replacing text directly */
+        .min-h-\\[calc\\(100dvh-14rem\\)\\].relative.flex.flex-col.place-content-center.place-items-center::before {
+          display: none !important;
+        }
+        
+        /* Show the original loading content since we're replacing text directly */
+        .min-h-\\[calc\\(100dvh-14rem\\)\\].relative.flex.flex-col.place-content-center.place-items-center > div {
+          opacity: 1 !important;
+        }
       `
       
       webview.insertCSS(css)
+      
+      // Also inject JavaScript to replace text content
+      const script = `
+        // Replace "ETA" text with "PIKE PIKER"
+        function replaceText() {
+          // Replace ETA with PIKE PIKER
+          const etaElements = document.querySelectorAll('.text-3xl.md\\:text-4xl');
+          etaElements.forEach(element => {
+            if (element.textContent.trim() === 'ETA') {
+              element.textContent = 'PIKE PIKER';
+              element.setAttribute('data-replaced', 'true');
+            }
+          });
+          
+          // Replace "It's your turn!" text with "Pike Piker Experience"
+          const turnElements = document.querySelectorAll('.text-white.text-center.text-[33px].md\\:text-6xl.font-medium, .text-white.text-center.text-\\[33px\\].md\\:text-6xl.font-medium');
+          turnElements.forEach(element => {
+            if (element.textContent.includes("It's your turn!") || element.textContent.includes("It&#x27;s your turn!")) {
+              element.textContent = "Pike Piker Experience";
+              element.setAttribute('data-replaced', 'true');
+            }
+          });
+          
+          // Hide any centered images/assets when experience is ready
+          const centerContainer = document.querySelector('.min-h-[calc(100dvh-14rem)].relative.flex.flex-col.place-content-center.place-items-center');
+          if (centerContainer) {
+            const images = centerContainer.querySelectorAll('img');
+            const svgs = centerContainer.querySelectorAll('svg:not(.animate-spin)');
+            [...images, ...svgs].forEach(element => {
+              element.style.display = 'none';
+            });
+          }
+        }
+        
+        // Run immediately and also on DOM changes
+        replaceText();
+        
+        // Watch for dynamic content changes
+        const observer = new MutationObserver(replaceText);
+        observer.observe(document.body, { childList: true, subtree: true });
+      `
+      
+      webview.executeJavaScript(script)
     }
 
     const handleLoadStart = () => {
@@ -66,13 +234,13 @@ export default function WebView({ url }) {
     webview.addEventListener('dom-ready', handleDomReady)
     webview.addEventListener('did-start-loading', handleLoadStart)
     webview.addEventListener('did-stop-loading', handleLoadStop)
-    webview.addEventListener('did-fail-load', handleFailLoad)
+    webview.addEventListener('did-fail-load', handleDomReady) // Also inject CSS on fail load
 
     return () => {
       webview.removeEventListener('dom-ready', handleDomReady)
       webview.removeEventListener('did-start-loading', handleLoadStart)
       webview.removeEventListener('did-stop-loading', handleLoadStop)
-      webview.removeEventListener('did-fail-load', handleFailLoad)
+      webview.removeEventListener('did-fail-load', handleDomReady)
     }
   }, [url])
 
