@@ -1,11 +1,16 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, forwardRef } from 'react'
 
-export default function WebView({ url }) {
+const WebView = forwardRef(function WebView({ url }, ref) {
   const webviewRef = useRef(null)
 
   useEffect(() => {
     const webview = webviewRef.current
     if (!webview) return
+    
+    // Expose webview to parent component via ref
+    if (ref) {
+      ref.current = webview
+    }
 
     const handleDomReady = () => {
       console.log('WebView loaded:', url)
@@ -175,128 +180,48 @@ export default function WebView({ url }) {
       
       webview.insertCSS(css)
       
-      // Also inject JavaScript to replace text content
-      const script = `
-        // Replace text content at different stages
-        function replaceText() {
-          console.log('Running text replacement...');
-          
-          // More comprehensive ETA replacement - target all possible elements
-          const allElements = document.querySelectorAll('*');
-          allElements.forEach(element => {
-            // Skip if already replaced
-            if (element.getAttribute('data-replaced') === 'true') return;
-            
-            // Check for ETA text
-            if (element.textContent && element.textContent.trim() === 'ETA' && element.children.length === 0) {
-              console.log('Found ETA element:', element);
-              element.textContent = 'Get Ready to Pedal!';
-              element.setAttribute('data-replaced', 'true');
-            }
-            
-            // Check for "It's your turn!" text - be more flexible with matching
-            const turnText = element.textContent;
-            if (turnText && (
-              turnText.includes("It's your turn!") || 
-              turnText.includes("It&#x27;s your turn!") ||
-              turnText.includes("It&apos;s your turn!") ||
-              turnText.trim() === "It's your turn!"
-            ) && element.children.length === 0) {
-              console.log('Found turn element:', element);
-              element.textContent = "Let's crush this workout together!";
-              element.setAttribute('data-replaced', 'true');
-            }
-          });
-          
-          // Also try more specific selectors as backup
-          const etaSelectors = [
-            '.text-3xl.md\\:text-4xl',
-            '.text-3xl',
-            '.md\\:text-4xl',
-            '[class*="text-3xl"]',
-            '[class*="text-4xl"]'
-          ];
-          
-          etaSelectors.forEach(selector => {
-            try {
-              const elements = document.querySelectorAll(selector);
-              elements.forEach(element => {
-                if (element.textContent && element.textContent.trim() === 'ETA' && !element.getAttribute('data-replaced')) {
-                  console.log('Found ETA with selector:', selector, element);
-                  element.textContent = 'Get Ready to Pedal!';
-                  element.setAttribute('data-replaced', 'true');
-                }
-              });
-            } catch(e) {
-              console.log('Selector failed:', selector, e);
-            }
-          });
-          
-          const turnSelectors = [
-            '.text-white.text-center.text-\\[33px\\].md\\:text-6xl.font-medium',
-            '.text-white.text-center',
-            '[class*="text-6xl"]',
-            '[class*="text-center"]',
-            'h1', 'h2', 'h3', 'div'
-          ];
-          
-          turnSelectors.forEach(selector => {
-            try {
-              const elements = document.querySelectorAll(selector);
-              elements.forEach(element => {
-                const text = element.textContent;
-                if (text && (
-                  text.includes("It's your turn!") || 
-                  text.includes("It&#x27;s your turn!") ||
-                  text.includes("It&apos;s your turn!")
-                ) && !element.getAttribute('data-replaced')) {
-                  console.log('Found turn with selector:', selector, element);
-                  element.textContent = "Let's crush this workout together!";
-                  element.setAttribute('data-replaced', 'true');
-                }
-              });
-            } catch(e) {
-              console.log('Selector failed:', selector, e);
-            }
-          });
-          
-          // Hide any centered images/assets when experience is ready
-          const centerContainer = document.querySelector('.min-h-[calc(100dvh-14rem)].relative.flex.flex-col.place-content-center.place-items-center');
-          if (centerContainer) {
-            const images = centerContainer.querySelectorAll('img');
-            const svgs = centerContainer.querySelectorAll('svg:not(.animate-spin)');
-            [...images, ...svgs].forEach(element => {
-              element.style.display = 'none';
-            });
+      // Just inject CSS to modify text fields directly
+      webview.executeJavaScript(`
+        // Hide cookie banners
+        const style = document.createElement('style');
+        style.textContent = \`
+          [class*="cookie" i], [id*="cookie" i], .cookieyes-banner, #cookieConsentModal { 
+            display: none !important; 
           }
+        \`;
+        document.head.appendChild(style);
+        
+        // Check for prompts and modify HTML directly
+        async function updateTextFields() {
+          try {
+            const response = await fetch('http://localhost:3001/current-prompt.json');
+            const data = await response.json();
+            if (!data.processed && data.text) {
+              
+              // Find all text inputs and modify their HTML directly
+              const inputs = document.querySelectorAll('input[type="text"], input:not([type]), textarea, [contenteditable]');
+              inputs.forEach(input => {
+                if (input.contentEditable === 'true') {
+                  input.innerHTML = data.text;
+                  input.textContent = data.text;
+                } else {
+                  input.value = data.text;
+                  input.setAttribute('value', data.text);
+                }
+              });
+              
+              // Mark as processed
+              fetch('http://localhost:3001/api/mark-processed', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({timestamp: data.timestamp})
+              });
+            }
+          } catch(e) {}
         }
         
-        // Run immediately
-        replaceText();
-        
-        // Run after a short delay to catch late-loading content
-        setTimeout(replaceText, 500);
-        setTimeout(replaceText, 1000);
-        setTimeout(replaceText, 2000);
-        
-        // Watch for dynamic content changes with more aggressive monitoring
-        const observer = new MutationObserver(() => {
-          setTimeout(replaceText, 100);
-        });
-        observer.observe(document.body, { 
-          childList: true, 
-          subtree: true, 
-          characterData: true,
-          attributes: false
-        });
-        
-        // Also run on various page events
-        document.addEventListener('DOMContentLoaded', replaceText);
-        window.addEventListener('load', replaceText);
-        
-      `
-      
-      webview.executeJavaScript(script)
+        setInterval(updateTextFields, 1000);
+      `);
     }
 
     const handleLoadStart = () => {
@@ -309,10 +234,6 @@ export default function WebView({ url }) {
 
     const handleFailLoad = (e) => {
       console.error('WebView failed to load:', e.errorDescription)
-      // Also inject on fail load to ensure replacements work
-      setTimeout(() => {
-        webview.executeJavaScript(script)
-      }, 1000)
     }
 
 
@@ -342,4 +263,6 @@ export default function WebView({ url }) {
       webpreferences="allowRunningInsecureContent"
     />
   )
-}
+})
+
+export default WebView

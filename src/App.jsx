@@ -10,11 +10,14 @@ function App() {
   const [speedHistory, setSpeedHistory] = useState([])
   const [distanceHistory, setDistanceHistory] = useState([])
   const [wsConnected, setWsConnected] = useState(false)
+  const [iframeState, setIframeState] = useState('unknown') // 'eta', 'your-turn', 'active', 'unknown'
+  const [rideStarted, setRideStarted] = useState(false)
   const wsRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   const lastSpeedUpdate = useRef(null)
   const lastDistanceUpdate = useRef(Date.now())
   const lastDistanceSample = useRef(Date.now())
+  const webviewRef = useRef(null)
 
   useEffect(() => {
     let interval = null
@@ -134,6 +137,77 @@ function App() {
     }
   }, [])
 
+  // Note: Prompt automation is now handled by preload.js script
+
+  // Monitor iframe state continuously
+  useEffect(() => {
+    const detectIframeState = async () => {
+      if (!webviewRef.current) return
+
+      try {
+        const stateScript = `
+          function detectCurrentState() {
+            // Check for ETA state - look for countdown timer and "In queue" text
+            const etaElements = document.querySelectorAll('[class*="text-8xl"], [class*="text-[140px]"]');
+            const inQueueText = document.querySelector('*:contains("In queue"), *:contains("ETA")');
+            
+            // Check for "Your turn" state
+            const yourTurnText = document.querySelector('*:contains("It\\'s your turn!")');
+            
+            // Check for active game state - look for game interface elements
+            const gameElements = document.querySelectorAll('[class*="fixed"], [class*="bottom-"]');
+            const hasControls = document.querySelector('[role="button"], button, input, textarea, [contenteditable]');
+            const hasTimeLeft = document.querySelector('*:contains("Time left")');
+            
+            // Advanced content detection
+            const bodyText = document.body.textContent || '';
+            
+            if (bodyText.includes('ETA') && bodyText.includes('In queue')) {
+              return 'eta';
+            }
+            
+            if (bodyText.includes("It's your turn!") || yourTurnText) {
+              return 'your-turn';
+            }
+            
+            // Active state indicators - look for game controls and time left
+            if (hasTimeLeft || (hasControls && !bodyText.includes('ETA') && !bodyText.includes("It's your turn!"))) {
+              return 'active';
+            }
+            
+            return 'unknown';
+          }
+          
+          return detectCurrentState();
+        `
+        
+        const detectedState = await webviewRef.current.executeJavaScript(stateScript)
+        
+        if (detectedState && detectedState !== iframeState) {
+          console.log('🎮 Iframe state changed:', iframeState, '->', detectedState)
+          setIframeState(detectedState)
+          
+          // Set ride started when we reach active state
+          if (detectedState === 'active' && !rideStarted) {
+            console.log('🚀 Ride started! Activating automation...')
+            setRideStarted(true)
+          }
+          
+          // Reset ride started if we go back to waiting states
+          if ((detectedState === 'eta' || detectedState === 'your-turn') && rideStarted) {
+            console.log('⏸️ Ride ended, returning to waiting state')
+            setRideStarted(false)
+          }
+        }
+      } catch (error) {
+        // Silently ignore errors - iframe might not be ready
+      }
+    }
+
+    const interval = setInterval(detectIframeState, 2000) // Check every 2 seconds
+    return () => clearInterval(interval)
+  }, [iframeState, rideStarted])
+
 
   const formatTime = (seconds) => {
     const hrs = Math.floor(seconds / 3600)
@@ -238,6 +312,29 @@ function App() {
           </div>
         </div>
 
+        {/* Ride Status Indicator */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            fontSize: '14px',
+            color: '#666',
+            marginBottom: '4px',
+            fontWeight: '500'
+          }}>
+            RIDE STATUS
+          </div>
+          <div style={{
+            fontSize: '12px',
+            fontWeight: 'bold',
+            color: iframeState === 'active' ? '#22c55e' : '#666',
+            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
+          }}>
+            {iframeState === 'active' ? '● ACTIVE' : 
+             iframeState === 'your-turn' ? '⏳ YOUR TURN' : 
+             iframeState === 'eta' ? '⏱️ WAITING' : 
+             '❓ UNKNOWN'}
+          </div>
+        </div>
+
         {/* Start/Stop Button */}
         <button
           onClick={() => setIsActive(!isActive)}
@@ -275,7 +372,7 @@ function App() {
           overflow: 'hidden',
           minHeight: '60vh'
         }}>
-          <WebView url="https://mirage.decart.ai/gameplay" />
+          <WebView url="https://mirage.decart.ai/gameplay" ref={webviewRef} />
         </div>
 
         {/* Bottom Metrics Row */}
