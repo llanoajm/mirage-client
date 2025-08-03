@@ -2,6 +2,7 @@ const express = require('express')
 const cors = require('cors')
 const fs = require('fs')
 const path = require('path')
+const { exec, execSync } = require('child_process')
 
 const app = express()
 const port = 3001
@@ -32,14 +33,32 @@ app.post('/prompt', (req, res) => {
   
   try {
     fs.writeFileSync(promptFilePath, JSON.stringify(promptData, null, 2))
+    console.log('✅ Prompt saved successfully')
+    
+    // Wait 2 seconds then execute the type_perod.sh script
+    setTimeout(() => {
+      const scriptPath = path.join(__dirname, 'type_perod.sh')
+      console.log(`🔧 Executing bash script after 2 seconds: ${scriptPath}`)
+      
+      try {
+        const output = execSync(`bash "${scriptPath}"`, { encoding: 'utf8', timeout: 5000 })
+        console.log('✅ BASH SCRIPT EXECUTED SUCCESSFULLY!')
+        console.log('Script output:', output)
+      } catch (scriptError) {
+        console.error('❌ BASH SCRIPT EXECUTION FAILED:', scriptError.message)
+        console.error('Script stderr:', scriptError.stderr)
+      }
+    }, 2000)
+    
     res.json({ 
       success: true, 
-      message: 'Prompt received and will be typed into the interface',
-      prompt: text 
+      message: 'Prompt received, saved, and bash script will execute after 2 seconds',
+      prompt: text,
+      bashScriptScheduled: true
     })
   } catch (error) {
-    console.error('Error saving prompt:', error)
-    res.status(500).json({ error: 'Failed to save prompt' })
+    console.error('❌ Error in prompt endpoint:', error)
+    res.status(500).json({ error: 'Failed to process prompt' })
   }
 })
 
